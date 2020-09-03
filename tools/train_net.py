@@ -43,7 +43,6 @@ def train(cfg):
 
     train_loader = build_data(cfg, is_train=True)
     val_loader = build_data(cfg, is_train=False)
-
     logger.info(train_loader.dataset)
     for x in val_loader:
         logger.info(x.dataset)

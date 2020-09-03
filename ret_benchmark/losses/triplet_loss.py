@@ -26,8 +26,8 @@ class TripletLoss(nn.Module):
         pos_mask = targets_col.expand(
             targets_row.shape[0], n
         ).t() == targets_row.expand(n, targets_row.shape[0])
-        neg_mask = 1 - pos_mask
-        pos_mask[:, :n] = pos_mask[:, :n] - eyes_
+        neg_mask = ~ pos_mask
+        pos_mask[:, :n] = pos_mask[:, :n].int() - eyes_
 
         loss = list()
         neg_count = list()

@@ -44,7 +44,7 @@ def extract(cfg, img_source, model_path=None):
 
     transforms = build_transforms(cfg, is_train=False)
 
-    dataset = BaseDataSet(img_source, transforms=transforms, mode=cfg.INPUT.MODE)
+    dataset = BaseDataSet(img_source, False, transforms=transforms, mode=cfg.INPUT.MODE)
     data_loader = DataLoader(
         dataset,
         collate_fn=collate_fn,

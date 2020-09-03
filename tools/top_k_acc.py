@@ -1,18 +1,5 @@
-# encoding: utf-8
-
-# Copyright (c) Malong Technologies Co., Ltd.
-# All rights reserved.
-#
-# Contact: github@malong.com
-#
-# This source code is licensed under the LICENSE file in the root directory of this source tree.
-
-import os, re, json
-from collections import defaultdict
+import sys, os, json
 import numpy as np
-
-from torch.utils.data import Dataset
-from ret_benchmark.utils.img_reader import read_image
 
 
 def read_data(dataset_name='DeepFashion2', bbox_gt=True, type_list=['train', 'validation']):
@@ -78,68 +65,34 @@ def read_data(dataset_name='DeepFashion2', bbox_gt=True, type_list=['train', 'va
     return img_list, base_path, item_dict
 
 
-class BaseDataSet(Dataset):
-    """
-    Basic Dataset read image path from img_source
-    img_source: list of img_path and label
-    """
+def get_distance_mtx(source_mtx, target_mtx):
+    dist = - 2 * source_mtx.dot(target_mtx.transpose()) + (source_mtx ** 2).sum(axis=1).reshape(-1, 1) + (target_mtx ** 2).sum(axis=1).reshape(1, -1)
+    return dist
 
-    def __init__(self, img_source, is_train, transforms=None, mode="RGB", unsup_da=False):
-        self.mode = mode
-        self.transforms = transforms
-        self.root = os.path.dirname(img_source)
-        assert os.path.exists(img_source), f"{img_source} NOT found."
-        self.img_source = img_source
-        self.is_train = is_train
-        self.unsup_da = unsup_da
+img_list, base_path, item_dict = read_data(dataset_name='DeepFashion2', bbox_gt=True, type_list=['train', 'validation'])
+img_list['validation'][:, 0] = np.asarray([f.split('/')[-1].split('.')[0] for f in img_list['validation'][:, 0]])
+result = np.load('./output/2020-08-19_feat.npz')
+validation_set = np.asarray([(line.split(',')[0], line.split(',')[1].strip()) for line in open('/home/jayeon/DeepFashion2/val_img_cropped_label.txt', 'r').readlines()])
+source = np.zeros(len(result['upc']), dtype=int)
+for idx, (feat, label, file_name) in enumerate(zip(result['feat'], result['upc'], validation_set[:, 0])):
+    f = file_name.split('/')[-1].split('_')[0]
+    source[idx] = img_list['validation'][:, 4][img_list['validation'][:, 0] == f][0]
 
-        self.label_list = list()
-        self.path_list = list()
-        self._load_data()
-        self.label_index_dict = self._build_label_index_dict()
+emb_mtx = result['feat']
+label = result['upc']
 
-    def __len__(self):
-        return len(self.label_list)
+user_idx = np.where(source == 0)[0]
+shop_idx = np.where(source == 1)[0]
+user_emb_mtx = emb_mtx[user_idx]
+shop_emb_mtx = emb_mtx[shop_idx]
 
-    def __repr__(self):
-        return self.__str__()
+user_shop_dist = get_distance_mtx(user_emb_mtx, shop_emb_mtx)
+user_shop_rank = np.argsort(user_shop_dist, axis=1)[:, :100]
+user_shop_corr = np.zeros_like(user_shop_rank)
+for idx, (u_idx, rel_shop) in enumerate(zip(user_idx, user_shop_rank)):
+    u_label = label[u_idx]
+    user_shop_corr[idx] = label[shop_idx[rel_shop]] == u_label
 
-    def __str__(self):
-        return f"| Dataset Info |datasize: {self.__len__()}|num_labels: {len(set(self.label_list))}|"
-
-    def _load_data(self):
-        if self.unsup_da:
-            source_type = 'train' if self.is_train else 'validation'
-            img_list, base_path, item_dict = read_data(dataset_name='DeepFashion2', bbox_gt=True)
-            labeled_data = [path.split('/')[-1].split('.')[0] for path
-                            in img_list[source_type][img_list[source_type][:, 4] == 1][:, 0]]
-            with open(self.img_source, "r") as f:
-                for line in f:
-                    _path, _label = re.split(r",", line.strip())
-                    if _path.split('/')[-1].split('_')[0] in labeled_data:
-                        self.path_list.append(_path)
-                        self.label_list.append(_label)
-
-        else:
-            with open(self.img_source, "r") as f:
-                for line in f:
-                    _path, _label = re.split(r",", line.strip())
-                    self.path_list.append(_path)
-                    self.label_list.append(_label)
-
-    def _build_label_index_dict(self):
-        index_dict = defaultdict(list)
-        for i, label in enumerate(self.label_list):
-            index_dict[label].append(i)
-        return index_dict
-
-    def __getitem__(self, index):
-        path = self.path_list[index]
-        img_path = os.path.join(self.root, path)
-        label = self.label_list[index]
-
-        img = read_image(img_path, mode=self.mode)
-
-        if self.transforms is not None:
-            img = self.transforms(img)
-        return img, label, index
+for k in [1, 5, 10, 20, 100]:
+    topk_accuracy = np.sum(np.sum(user_shop_corr[:, :k], axis=1) > 0) / user_shop_corr.shape[0]
+    print('Top-{} Accuracy: {:.5f}'.format(k, topk_accuracy))

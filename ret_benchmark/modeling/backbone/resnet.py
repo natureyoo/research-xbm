@@ -157,6 +157,13 @@ class ResNet(nn.Module):
                 m.bias.data.zero_()
 
 
+@registry.BACKBONES.register("resnet101")
+class ResNet101(ResNet):
+    def __init__(self, last_stride=1):
+        super(ResNet101, self).__init__(last_stride=last_stride, layers=[3, 4, 23, 3])
+        self.random_init()
+
+
 @registry.BACKBONES.register("resnet50")
 class ResNet50(ResNet):
     def __init__(self, last_stride=1):

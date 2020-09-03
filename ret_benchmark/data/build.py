@@ -17,7 +17,7 @@ def build_data(cfg, is_train=True):
     transforms = build_transforms(cfg, is_train=is_train)
     if is_train:
         dataset = BaseDataSet(
-            cfg.DATA.TRAIN_IMG_SOURCE, transforms=transforms, mode=cfg.INPUT.MODE
+            cfg.DATA.TRAIN_IMG_SOURCE, is_train, transforms=transforms, mode=cfg.INPUT.MODE, unsup_da=cfg.UDA
         )
         if cfg.DATA.SAMPLE == "RandomIdentitySampler":
             sampler = RandomIdentitySampler(
@@ -54,7 +54,7 @@ def build_data(cfg, is_train=True):
             cfg.DATA.PKUVID_IMG_SOURCE,
         ]:
             if len(x) != 0:
-                dataset = BaseDataSet(x, transforms=transforms, mode=cfg.INPUT.MODE)
+                dataset = BaseDataSet(x, is_train, transforms=transforms, mode=cfg.INPUT.MODE, unsup_da=cfg.UDA)
                 data_loader = DataLoader(
                     dataset,
                     collate_fn=collate_fn,
